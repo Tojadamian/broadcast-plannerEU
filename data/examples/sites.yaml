@@ -1,0 +1,42 @@
+sites:
+  - id: TX_BRU_HPHT
+    name: Brussels HPHT
+    x: 4755000.0
+    y: 2295000.0
+    frequency_mhz: 474.0
+    erp_kw: 100.0
+    antenna_height_m: 300.0
+    topology: HPHT
+    is_pilot: true
+    launch_delay_us: 0.0
+    channel: CH21
+  - id: TX_ANT_HPHT
+    name: Antwerp HPHT
+    x: 4798000.0
+    y: 2338000.0
+    frequency_mhz: 474.0
+    erp_kw: 100.0
+    antenna_height_m: 280.0
+    topology: HPHT
+    is_pilot: false
+    channel: CH21
+  - id: TX_MEC_MPMT
+    name: Mechelen MPMT
+    x: 4776000.0
+    y: 2312000.0
+    frequency_mhz: 474.0
+    erp_kw: 5.0
+    antenna_height_m: 80.0
+    topology: MPMT
+    is_pilot: false
+    channel: CH21
+  - id: TX_GHENT_MPMT
+    name: Ghent MPMT
+    x: 4738000.0
+    y: 2326000.0
+    frequency_mhz: 474.0
+    erp_kw: 5.0
+    antenna_height_m: 80.0
+    topology: MPMT
+    is_pilot: false
+    channel: CH21
