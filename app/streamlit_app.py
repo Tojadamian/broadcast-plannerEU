@@ -16,7 +16,7 @@ from streamlit_folium import st_folium
 
 # --- Core Domain Imports ---
 from broadcast_planner.core.crs import to_display
-from broadcast_planner.core.grids import make_grid, read_raster
+from broadcast_planner.core.grids import align_layers_to_grid, make_grid, read_raster
 from broadcast_planner.core.regions import REGIONS, get_region
 from broadcast_planner.core.sites import Site, SiteCollection, load_sites, save_sites
 
@@ -293,24 +293,27 @@ def page_run():
                 logger.info(f"Building grid at {st.session_state['res_m']}m resolution...")
                 grid = make_grid(region, resolution_m=st.session_state["res_m"])
                 
-                dem = st.session_state["dem"]
-                clutter = st.session_state["clutter"]
-                population = st.session_state["population"]
+                layer_grid = st.session_state.get("layer_grid")
+                dem, clutter, population = align_layers_to_grid(
+                    grid,
+                    st.session_state["dem"],
+                    st.session_state["clutter"],
+                    st.session_state["population"],
+                    source_grid=layer_grid,
+                )
 
                 logger.info("Assigning SFN delays...")
                 sites = assign_sfn_delays(sites)
                 st.session_state["sites"] = sites
 
-                layer_grid = st.session_state.get("layer_grid")
-
                 logger.info("Running DVB-T Engine...")
                 st.session_state["dvb_result"] = run_dvb_t_coverage(
-                    sites, grid, dem, clutter, population, dvb_config, source_grid=layer_grid
+                    sites, grid, dem, clutter, population, dvb_config
                 )
-                
+
                 logger.info("Running 5G Broadcast Engine...")
                 st.session_state["fiveg_result"] = run_fiveg_broadcast_coverage(
-                    sites, grid, dem, clutter, population, fiveg_config, source_grid=layer_grid
+                    sites, grid, dem, clutter, population, fiveg_config
                 )
                 
                 logger.info("--- SIMULATION SUCCESSFUL ---")
