@@ -30,20 +30,16 @@ class RegionConfig:
         return self.bounds[3] - self.bounds[1]
 
     def dem_path(self, cached: bool = True) -> Path:
-        if cached and (CACHE_DIR / "dem.tif").exists():
-            return CACHE_DIR / "dem.tif"
+        # Zawsze wczytujemy plik z folderu examples, 
+        # bo to tam są Twoje fizyczne dane po ostatnim prepare
         return EXAMPLES_DIR / "dem.tif"
-
+    
     def clutter_path(self, cached: bool = True) -> Path:
-        if cached and (CACHE_DIR / "clutter.tif").exists():
-            return CACHE_DIR / "clutter.tif"
         return EXAMPLES_DIR / "clutter.tif"
-
+    
     def population_path(self, cached: bool = True) -> Path:
-        if cached and (CACHE_DIR / "population.tif").exists():
-            return CACHE_DIR / "population.tif"
         return EXAMPLES_DIR / "population.tif"
-
+    
     def sites_path(self) -> Path:
         return EXAMPLES_DIR / self.sites_filename
 

@@ -90,13 +90,10 @@ def init_session_state() -> None:
 def _load_gis_layers() -> None:
     """Loads underlying GIS raster matrices into memory."""
     region = get_region(st.session_state["region_name"])
+    # KLUCZOWA ZMIANA: Zapisujemy źródłowy 'layer_grid', zamiast rzucać go w nicość '_'
     st.session_state["dem"], st.session_state["layer_grid"] = read_raster(region.dem_path())
     st.session_state["clutter"], _ = read_raster(region.clutter_path())
     st.session_state["population"], _ = read_raster(region.population_path())
-    # Reset simulation results when region changes
-    st.session_state["dvb_result"] = None
-    st.session_state["fiveg_result"] = None
-    st.session_state["opt_result"] = None
 
 
 # ==========================================
@@ -389,46 +386,79 @@ def page_opt():
         topology = st.selectbox("Site Type", ["HPHT", "MPMT", "LPLT"], index=0)
 
     if st.button("Start Greedy Optimization Loop", type="primary"):
-        with st.spinner("Analyzing candidate grid locations..."):
-            region = get_region(st.session_state["region_name"])
-            grid = make_grid(region, resolution_m=st.session_state["res_m"])
-            
-            # Align layers to grid (CRITICAL to match dimensions)
-            layer_grid = st.session_state.get("layer_grid")
-            dem, clutter, population = align_layers_to_grid(
-                grid,
-                st.session_state["dem"],
-                st.session_state["clutter"],
-                st.session_state["population"],
-                source_grid=layer_grid,
-            )
-            
-            res = greedy_add_sites(
-                region,
-                grid,
-                dem,
-                clutter,
-                population,
-                st.session_state["sites"],
-                n_add=n_add,
-                topology=topology,
-            )
-            st.session_state["opt_result"] = res
-            st.session_state["opt_grid"] = grid
-            st.session_state["opt_dem"] = dem
-            st.session_state["opt_clutter"] = clutter
-            st.session_state["opt_population"] = population
-            st.session_state["sites"] = res.selected_sites
+        logger.info("--- STARTING OPTIMIZATION LOOP ---")
+        
+        region = get_region(st.session_state["region_name"])
+        sites = st.session_state["sites"]
+        
+        # 1. Sprawdzenie granic
+        minx, miny, maxx, maxy = region.bounds
+        for s in sites.sites:
+            if not (minx <= s.x <= maxx and miny <= s.y <= maxy):
+                err_msg = f"Tower '{s.id}' at ({s.x}, {s.y}) is OUTSIDE the loaded map boundaries!"
+                logger.error(err_msg)
+                st.error(f"❌ **Geographic Error:** {err_msg} Popraw współrzędne w zakładce Sites przed optymalizacją.")
+                return
+
+        with st.spinner("Analyzing candidate grid locations (this may take a few minutes)..."):
+            try:
+                grid = make_grid(region, resolution_m=st.session_state["res_m"])
+                
+                layer_grid = st.session_state.get("layer_grid")
+                from broadcast_planner.core.grids import align_layers_to_grid
+                aligned_dem, aligned_clutter, aligned_population = align_layers_to_grid(
+                    grid,
+                    st.session_state["dem"],
+                    st.session_state["clutter"],
+                    st.session_state["population"],
+                    source_grid=layer_grid,
+                )
+                # DIAGNOSTYKA: Sprawdźmy czy wczytane dane nie są samymi zerami
+                total_pop = np.sum(aligned_population)
+                logger.info(f"Suma populacji w wczytanej macierzy: {total_pop}")
+                if total_pop == 0:
+                    st.warning("⚠️ Ostrzeżenie: Wczytane dane populacji są puste (suma = 0)! Sprawdź pliki TIF.")
+                
+                # 2. Bezpieczna, domyślna konfiguracja zamiast restrykcyjnej
+                from broadcast_planner.dvb_t.models import DvbTConfig
+                opt_config = DvbTConfig()
+
+                logger.info(f"Running greedy optimizer for {n_add} new {topology} sites...")
+                
+                res = greedy_add_sites(
+                    region=region,
+                    grid=grid,
+                    dem=aligned_dem,
+                    clutter=aligned_clutter,
+                    population=aligned_population,
+                    existing=sites,
+                    n_add=n_add,
+                    dvb_config=opt_config,
+                    topology=topology,
+                )
+                
+                st.session_state["opt_result"] = res
+                st.session_state["opt_grid"] = grid
+                st.session_state["opt_dem"] = aligned_dem
+                st.session_state["opt_clutter"] = aligned_clutter
+                st.session_state["opt_population"] = aligned_population
+                st.session_state["sites"] = res.selected_sites
+                
+                logger.info("--- OPTIMIZATION SUCCESSFUL ---")
+                
+            except Exception as e:
+                logger.exception("CRITICAL ENGINE FAILURE during optimization loop!")
+                st.error(f"💥 **Engine Crash:** {str(e)}\n\nSprawdź logi w terminalu.")
+                return  
         
         st.rerun()
 
-    # Display results if they exist (persists across reruns)
-    if "opt_result" in st.session_state:
+    # 3. ZABEZPIECZENIE PRZED NoneType: Wymagamy realnej wartości, a nie tylko klucza
+    if st.session_state.get("opt_result") is not None:
         res = st.session_state["opt_result"]
         st.success(f"Optimization finished! Final Coverage: {res.final_coverage_percent}%")
         st.write("Incremental Population Gains:", res.incremental_coverage)
         
-        # Show coverage map after optimization
         st.subheader("📊 Coverage After Optimization")
         with st.spinner("Computing final coverage map..."):
             grid = st.session_state["opt_grid"]
@@ -436,19 +466,17 @@ def page_opt():
             clutter = st.session_state["opt_clutter"]
             population = st.session_state["opt_population"]
             
-            dvb_config = DvbTConfig()
+            from broadcast_planner.dvb_t.models import DvbTConfig
             opt_coverage = run_dvb_t_coverage(
-                res.selected_sites, grid, dem, clutter, population, dvb_config
+                res.selected_sites, grid, dem, clutter, population, DvbTConfig()
             )
             
-            # Display map
             region = get_region(st.session_state["region_name"])
             test_points = list(getattr(region, 'test_points', ())) if getattr(region, 'test_points', ()) else None
             st_folium(
                 make_map(res.selected_sites, opt_coverage.service_coverage.astype(float), "DVB-T (Optimized)", test_points=test_points),
                 width=1000, height=500
             )
-
 
 def page_exports():
     st.header("💾 Export Engine")
