@@ -1,8 +1,8 @@
 sites:
-  - id: TX_BRU_HPHT
-    name: Brussels HPHT
-    x: 3923672.0
-    y: 3097435.0
+  - id: TX_MUC_HPHT
+    name: Munich HPHT
+    x: 4438298.0
+    y: 2781422.0
     frequency_mhz: 474.0
     erp_kw: 100.0
     antenna_height_m: 300.0
@@ -10,30 +10,30 @@ sites:
     is_pilot: true
     launch_delay_us: 0.0
     channel: CH21
-  - id: TX_ANT_HPHT
-    name: Antwerp HPHT
-    x: 3930258.0
-    y: 3138318.0
+  - id: TX_AUG_HPHT
+    name: Augsburg HPHT
+    x: 4425000.0
+    y: 2755000.0
     frequency_mhz: 474.0
-    erp_kw: 100.0
-    antenna_height_m: 280.0
+    erp_kw: 80.0
+    antenna_height_m: 250.0
     topology: HPHT
     is_pilot: false
     channel: CH21
-  - id: TX_MEC_MPMT
-    name: Mechelen MPMT
-    x: 3920000.0
-    y: 3115000.0
+  - id: TX_ING_MPMT
+    name: Ingolstadt MPMT
+    x: 4445000.0
+    y: 2800000.0
     frequency_mhz: 474.0
     erp_kw: 5.0
     antenna_height_m: 80.0
     topology: MPMT
     is_pilot: false
     channel: CH21
-  - id: TX_GHENT_MPMT
-    name: Ghent MPMT
-    x: 3910000.0
-    y: 3130000.0
+  - id: TX_ROE_MPMT
+    name: Rosenheim MPMT
+    x: 4460000.0
+    y: 2760000.0
     frequency_mhz: 474.0
     erp_kw: 5.0
     antenna_height_m: 80.0

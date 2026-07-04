@@ -18,6 +18,8 @@ class RegionConfig:
     name: str
     bounds: Tuple[float, float, float, float]  # minx, miny, maxx, maxy in EPSG:3035
     resolution_m: float = 250.0
+    sites_filename: str = "sites.yaml"  # Region-specific default sites
+    test_points: Tuple[Tuple[float, float, str], ...] = ()  # (x, y, name) for coverage testing
 
     @property
     def width_m(self) -> float:
@@ -43,24 +45,42 @@ class RegionConfig:
         return EXAMPLES_DIR / "population.tif"
 
     def sites_path(self) -> Path:
-        return EXAMPLES_DIR / "sites.yaml"
+        return EXAMPLES_DIR / self.sites_filename
 
 
 DEFAULT_REGION = RegionConfig(
     name="Brussels-Antwerp corridor",
-    bounds=(4_720_000.0, 2_260_000.0, 4_820_000.0, 2_360_000.0),
+    bounds=(3_900_000.0, 3_080_000.0, 3_950_000.0, 3_160_000.0),
     resolution_m=250.0,
+    sites_filename="sites.yaml",
+    test_points=(
+        (3915000.0, 3100000.0, "Downtown Brussels"),
+        (3935000.0, 3120000.0, "Central Antwerp"),
+        (3920000.0, 3130000.0, "Mechelen Test"),
+    ),
 )
 
 REGIONS: Dict[str, RegionConfig] = {
     "brussels_antwerp": DEFAULT_REGION,
     "upper_bavaria": RegionConfig(
         name="Upper Bavaria",
-        bounds=(4_440_000.0, 5_300_000.0, 4_540_000.0, 5_400_000.0),
+        bounds=(4_400_000.0, 2_740_000.0, 4_480_000.0, 2_820_000.0),
+        sites_filename="sites_upper_bavaria.yaml",
+        test_points=(
+            (4438298.0, 2781422.0, "Munich City Center"),
+            (4425000.0, 2765000.0, "Augsburg Test"),
+            (4450000.0, 2800000.0, "Ingolstadt Test"),
+        ),
     ),
     "tuscany": RegionConfig(
         name="Tuscany",
-        bounds=(4_550_000.0, 4_750_000.0, 4_650_000.0, 4_850_000.0),
+        bounds=(4_380_000.0, 2_250_000.0, 4_460_000.0, 2_340_000.0),
+        sites_filename="sites_tuscany.yaml",
+        test_points=(
+            (4422352.0, 2296442.0, "Florence City Center"),
+            (4410000.0, 2270000.0, "Siena Test"),
+            (4400000.0, 2310000.0, "Pisa Test"),
+        ),
     ),
 }
 

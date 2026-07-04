@@ -1,8 +1,8 @@
 sites:
-  - id: TX_BRU_HPHT
-    name: Brussels HPHT
-    x: 3923672.0
-    y: 3097435.0
+  - id: TX_FLO_HPHT
+    name: Florence HPHT
+    x: 4422352.0
+    y: 2296442.0
     frequency_mhz: 474.0
     erp_kw: 100.0
     antenna_height_m: 300.0
@@ -10,30 +10,30 @@ sites:
     is_pilot: true
     launch_delay_us: 0.0
     channel: CH21
-  - id: TX_ANT_HPHT
-    name: Antwerp HPHT
-    x: 3930258.0
-    y: 3138318.0
+  - id: TX_SIE_HPHT
+    name: Siena HPHT
+    x: 4410000.0
+    y: 2270000.0
     frequency_mhz: 474.0
-    erp_kw: 100.0
-    antenna_height_m: 280.0
+    erp_kw: 80.0
+    antenna_height_m: 250.0
     topology: HPHT
     is_pilot: false
     channel: CH21
-  - id: TX_MEC_MPMT
-    name: Mechelen MPMT
-    x: 3920000.0
-    y: 3115000.0
+  - id: TX_PIE_MPMT
+    name: Pisa MPMT
+    x: 4395000.0
+    y: 2310000.0
     frequency_mhz: 474.0
     erp_kw: 5.0
     antenna_height_m: 80.0
     topology: MPMT
     is_pilot: false
     channel: CH21
-  - id: TX_GHENT_MPMT
-    name: Ghent MPMT
-    x: 3910000.0
-    y: 3130000.0
+  - id: TX_LIV_MPMT
+    name: Livorno MPMT
+    x: 4400000.0
+    y: 2285000.0
     frequency_mhz: 474.0
     erp_kw: 5.0
     antenna_height_m: 80.0

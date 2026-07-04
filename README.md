@@ -8,7 +8,7 @@ Educational mini broadcast network planner for telecommunications master classes
 cd broadcast-planner
 python -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -e . --no-deps
 prepare-examples          # synthetic DEM, clutter, population (offline labs)
 streamlit run app/streamlit_app.py
 ```

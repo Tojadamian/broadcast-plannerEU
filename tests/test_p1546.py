@@ -25,7 +25,7 @@ def test_field_strength_decreases_with_distance():
     grid = make_grid(region, resolution_m=5000.0)
     dem = np.full(grid.shape, 50.0)
     clutter = np.full(grid.shape, 10, dtype=np.int16)
-    site = Site(id="T1", name="Test", x=4750000.0, y=2290000.0, erp_kw=100.0)
+    site = Site(id="T1", name="Test", x=3923672.0, y=3097435.0, erp_kw=100.0)
     result = compute_site_field_strength_fast(site, grid, dem, clutter)
     center = result.field_strength_dbuv_m[grid.height // 2, grid.width // 2]
     corner = result.field_strength_dbuv_m[0, 0]

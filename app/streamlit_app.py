@@ -64,10 +64,11 @@ OUTPUT_DIR = PROJECT_ROOT / "output"
 # ==========================================
 def init_session_state() -> None:
     """Initializes all necessary session state variables on app boot."""
+    region = get_region(st.session_state.get("region_name", "brussels_antwerp"))
     default_states = {
         "region_name": "brussels_antwerp",
         "res_m": 250.0,  # Fixed default to match native data layers
-        "sites": load_sites(EXAMPLES_DIR / "sites.yaml"),
+        "sites": load_sites(region.sites_path()),
         "dem": None,
         "clutter": None,
         "population": None,
@@ -92,17 +93,21 @@ def _load_gis_layers() -> None:
     st.session_state["dem"], st.session_state["layer_grid"] = read_raster(region.dem_path())
     st.session_state["clutter"], _ = read_raster(region.clutter_path())
     st.session_state["population"], _ = read_raster(region.population_path())
+    # Reset simulation results when region changes
+    st.session_state["dvb_result"] = None
+    st.session_state["fiveg_result"] = None
+    st.session_state["opt_result"] = None
 
 
 # ==========================================
 # HELPER COMPONENTS
 # ==========================================
-def make_map(sites: SiteCollection, coverage_array: np.ndarray, tech_name: str) -> folium.Map:
+def make_map(sites: SiteCollection, coverage_array: np.ndarray, tech_name: str, test_points: list = None) -> folium.Map:
     """Generates an interactive Folium map perfectly framed around the data."""
     region = get_region(st.session_state["region_name"])
     minx, miny, maxx, maxy = region.bounds
 
-    # 1. Transform all 4 corners to catch any inverted GIS data bounds
+    # 1. Transform all 4 corners to WGS84 (lon, lat)
     corners = [
         to_display(minx, miny),
         to_display(maxx, miny),
@@ -110,11 +115,11 @@ def make_map(sites: SiteCollection, coverage_array: np.ndarray, tech_name: str) 
         to_display(minx, maxy)
     ]
 
-    # 2. Bulletproof Lat/Lon separation (In Europe, Latitude > Longitude)
-    lats = [max(c) for c in corners]
-    lons = [min(c) for c in corners]
+    # 2. Extract Latitude and Longitude explicitly (to_display returns (lon, lat))
+    lons = [c[0] for c in corners]
+    lats = [c[1] for c in corners]
 
-    # 3. Force strict South, North, West, East bounds
+    # 3. Compute strict South, North, West, East bounds
     south = min(lats)
     north = max(lats)
     west = min(lons)
@@ -125,7 +130,7 @@ def make_map(sites: SiteCollection, coverage_array: np.ndarray, tech_name: str) 
     center_lon = (west + east) / 2.0
     m = folium.Map(location=[center_lat, center_lon], zoom_start=9)
 
-    # 5. Add Site Markers safely
+    # 5. Add Site Markers safely (transmitters)
     for site in sites.sites:
         c1, c2 = to_display(site.x, site.y)
         lat, lon = (c1, c2) if c1 > c2 else (c2, c1)
@@ -133,9 +138,19 @@ def make_map(sites: SiteCollection, coverage_array: np.ndarray, tech_name: str) 
         color = "red" if getattr(site, 'is_pilot', False) else "blue"
         folium.Marker(
             [lat, lon],
-            popup=f"{site.name}<br>{site.erp_kw} kW",
-            icon=folium.Icon(color=color, icon="info-sign"),
+            popup=f"TX: {site.name}<br>{site.erp_kw} kW",
+            icon=folium.Icon(color=color, icon="broadcast"),
         ).add_to(m)
+
+    # 5b. Add Test Points (receivers) if provided
+    if test_points:
+        for x, y, name in test_points:
+            lon, lat = to_display(x, y)
+            folium.Marker(
+                [lat, lon],
+                popup=f"RX: {name}",
+                icon=folium.Icon(color="green", icon="check"),
+            ).add_to(m)
 
     # 6. Build Leaflet-safe bounds that CANNOT wrap around the world
     bounds = [[south, west], [north, east]]
@@ -171,10 +186,15 @@ def page_setup():
             
         submitted = st.form_submit_button("Load GIS Data")
         if submitted:
+            # If region changed, load new region's default sites
+            if st.session_state["region_name"] != region_name:
+                new_region = get_region(region_name)
+                st.session_state["sites"] = load_sites(new_region.sites_path())
+            
             st.session_state["region_name"] = region_name
             st.session_state["res_m"] = res_m
             _load_gis_layers()
-            st.success(f"Loaded '{region_name}' at 250.0m resolution successfully.")
+            st.success(f"Loaded '{region_name}' at 250.0m resolution with default transmitters.")
 
 
 def page_sites():
@@ -340,17 +360,20 @@ def page_compare():
     ])
     st.dataframe(df, width="stretch")
 
+    region = get_region(st.session_state["region_name"])
+    test_points = list(getattr(region, 'test_points', ())) if getattr(region, 'test_points', ()) else None
+
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("DVB-T Footprint")
         st_folium(
-            make_map(st.session_state["sites"], dvb.service_coverage.astype(float), "DVB-T"),
+            make_map(st.session_state["sites"], dvb.service_coverage.astype(float), "DVB-T", test_points=test_points),
             width=500, height=450
         )
     with col2:
         st.subheader("5G Broadcast Footprint")
         st_folium(
-            make_map(st.session_state["sites"], g5.service_coverage.astype(float), "5G"),
+            make_map(st.session_state["sites"], g5.service_coverage.astype(float), "5G", test_points=test_points),
             width=500, height=450
         )
 
@@ -370,21 +393,61 @@ def page_opt():
             region = get_region(st.session_state["region_name"])
             grid = make_grid(region, resolution_m=st.session_state["res_m"])
             
-            res = greedy_add_sites(
-                region,
+            # Align layers to grid (CRITICAL to match dimensions)
+            layer_grid = st.session_state.get("layer_grid")
+            dem, clutter, population = align_layers_to_grid(
                 grid,
                 st.session_state["dem"],
                 st.session_state["clutter"],
                 st.session_state["population"],
+                source_grid=layer_grid,
+            )
+            
+            res = greedy_add_sites(
+                region,
+                grid,
+                dem,
+                clutter,
+                population,
                 st.session_state["sites"],
                 n_add=n_add,
                 topology=topology,
             )
             st.session_state["opt_result"] = res
+            st.session_state["opt_grid"] = grid
+            st.session_state["opt_dem"] = dem
+            st.session_state["opt_clutter"] = clutter
+            st.session_state["opt_population"] = population
             st.session_state["sites"] = res.selected_sites
-            
+        
+        st.rerun()
+
+    # Display results if they exist (persists across reruns)
+    if "opt_result" in st.session_state:
+        res = st.session_state["opt_result"]
         st.success(f"Optimization finished! Final Coverage: {res.final_coverage_percent}%")
         st.write("Incremental Population Gains:", res.incremental_coverage)
+        
+        # Show coverage map after optimization
+        st.subheader("📊 Coverage After Optimization")
+        with st.spinner("Computing final coverage map..."):
+            grid = st.session_state["opt_grid"]
+            dem = st.session_state["opt_dem"]
+            clutter = st.session_state["opt_clutter"]
+            population = st.session_state["opt_population"]
+            
+            dvb_config = DvbTConfig()
+            opt_coverage = run_dvb_t_coverage(
+                res.selected_sites, grid, dem, clutter, population, dvb_config
+            )
+            
+            # Display map
+            region = get_region(st.session_state["region_name"])
+            test_points = list(getattr(region, 'test_points', ())) if getattr(region, 'test_points', ()) else None
+            st_folium(
+                make_map(res.selected_sites, opt_coverage.service_coverage.astype(float), "DVB-T (Optimized)", test_points=test_points),
+                width=1000, height=500
+            )
 
 
 def page_exports():
@@ -411,6 +474,37 @@ def page_exports():
             st.success(f"Data successfully exported to `{OUTPUT_DIR}`")
 
 
+def page_receivers():
+    st.header("📡 Test Receiver Points (Coverage Monitoring)")
+    
+    region = get_region(st.session_state["region_name"])
+    st.info(f"ℹ️ These are default monitoring points for {region.name} to track coverage quality.")
+    
+    test_points = getattr(region, 'test_points', ())
+    if not test_points:
+        st.warning("No test receivers defined for this region.")
+        return
+    
+    # Display current test points
+    st.subheader("Default Test Receivers")
+    test_data = []
+    for x, y, name in test_points:
+        lon, lat = to_display(x, y)
+        test_data.append({
+            "Name": name,
+            "Latitude": f"{lat:.4f}°N",
+            "Longitude": f"{lon:.4f}°E",
+            "X (EPSG:3035)": f"{x:.0f}",
+            "Y (EPSG:3035)": f"{y:.0f}",
+        })
+    
+    df_receivers = pd.DataFrame(test_data)
+    st.dataframe(df_receivers, width="stretch", use_container_width=True)
+    
+    st.write(f"**Total test points:** {len(test_points)}")
+    st.caption("These receivers are displayed as 🟢 green markers on the coverage maps in the 'Compare' page.")
+
+
 # ==========================================
 # MAIN ROUTER
 # ==========================================
@@ -427,6 +521,7 @@ def main():
     pages = {
         "Setup Region": page_setup,
         "Sites": page_sites,
+        "Receivers": page_receivers,
         "Simulate": page_run,
         "Compare": page_compare,
         "Optimize": page_opt,
